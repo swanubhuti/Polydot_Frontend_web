@@ -1,0 +1,62 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: uat-easydairy-web
+resources:
+  - ../../base
+
+images:
+  - name: 593223115766.dkr.ecr.ap-southeast-2.amazonaws.com/web
+    newTag: uat
+
+configMapGenerator:
+  - name: web-configmap
+    behavior: merge
+    literals:
+      - BASE_URL=https://uat.api.easydairy.com.au
+
+secretGenerator:
+  - name: web-secrets
+    envs:
+      - .env
+
+patches:
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: Ingress
+      name: easydairy-web-ingress
+    patch: |-
+      - op: add
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1group.name
+        value: dev
+
+      - op: add
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1certificate-arn
+        value: arn:aws:acm:ap-southeast-2:593223115766:certificate/206896c7-37d1-497a-9fe4-1597d7a8b09b
+      
+      - op: replace
+        path: /spec/rules/0/host
+        value: uat.web.easydairy.com.au
+
+  - target:
+      group: monitoring.coreos.com
+      version: v1
+      kind: Probe
+      name: easydairy-web-probe
+    patch: |-
+      - op: replace
+        path: /spec/targets/staticConfig/static/0
+        value: "http://web.uat-easydairy-web.svc.cluster.local/healthcheck"
+      - op: add
+        path: /spec/targets/staticConfig/labels/environment
+        value: uat
+  
+  - target:
+      group: monitoring.coreos.com
+      version: v1
+      kind: PrometheusRule
+      name: easydairy-web-prometheusrule
+    patch: |-
+      - op: replace
+        path: /spec/groups/0/rules/0/expr
+        value: probe_success{namespace="uat-easydairy-web", service="easydairy-web"} == 0
