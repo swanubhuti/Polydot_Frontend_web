@@ -1,0 +1,134 @@
+## Create a generic namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: easydairy-web-namespace
+---
+## Empty configmap for web deployment
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-configmap
+---
+## This sets up the web pods as a deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  selector:
+    matchLabels:
+      name: web
+  template:
+    metadata:
+      labels:
+        name: web
+    spec:
+      serviceAccountName: easydairy-web-service-account
+      containers:
+        - name: web
+          image: 593223115766.dkr.ecr.ap-southeast-2.amazonaws.com/web
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: web-configmap
+            - secretRef:
+                name: web-secrets
+      restartPolicy: Always
+---
+## This sets up web service and exposes it internally
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  ports:
+    - port: 80
+      name: http
+      targetPort: 3000
+    - port: 443
+      name: https
+      targetPort: 3000
+  selector:
+    name: web
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: easydairy-web-probe
+spec:
+  interval: 30s
+  module: http_2xx
+  prober:
+    url: blackbox-exporter.monitoring.svc.cluster.local:19115
+  targets:
+    staticConfig:
+      labels:
+        service: easydairy-web
+      static:
+        - http://web.easydairy-web.svc.cluster.local/healthcheck
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: easydairy-web-prometheusrule
+spec:
+  groups:
+    - name: "Frontend_Alerts"
+      rules:
+        - alert: "Probe_Failed"
+          annotations:
+            summary: "Healthcheck is not working"
+            description: "Healthcheck failed to get the correct response for service name: {{ $labels.service }} for the past 3 minutes."
+          expr: probe_success{namespace="", service=""} == 0
+          for: 3m
+          labels:
+            severity: critical
+            system_type: frontend
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: easydairy-web-alertmanagerconfig
+spec:
+  route:
+    receiver: Frontend_Team
+    groupBy:
+      - namespace
+    matchers:
+      - name: severity
+        value: critical
+      - name: system_type
+        value: frontend
+  receivers:
+    - name: Frontend_Team
+      emailConfigs:
+        - to: "adamkoay55@gmail.com, sarah@polydot.com.au, brad@polydot.com.au, pierre@polydot.com.au"
+---
+## This exposes the web service to the outside world
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: easydairy-web-ingress
+  annotations:
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/healthcheck-path: /healthcheck
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443' 
+spec:
+  ingressClassName: alb
+  rules:
+    - host: web.easydairy.com.au
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80

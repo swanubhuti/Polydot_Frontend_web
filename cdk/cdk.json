@@ -1,0 +1,58 @@
+{
+	"app": "npx ts-node --prefer-ts-exts bin/cdk-main.ts",
+	"watch": {
+		"include": [
+			"**"
+		],
+		"exclude": [
+			"README.md",
+			"cdk*.json",
+			"**/*.d.ts",
+			"**/*.js",
+			"tsconfig.json",
+			"package*.json",
+			"yarn.lock",
+			"node_modules",
+			"test"
+		]
+	},
+	"context": {
+		"@aws-cdk/aws-apigateway:usagePlanKeyOrderInsensitiveId": true,
+		"@aws-cdk/core:stackRelativeExports": true,
+		"@aws-cdk/aws-rds:lowercaseDbIdentifier": true,
+		"@aws-cdk/aws-lambda:recognizeVersionProps": true,
+		"@aws-cdk/aws-cloudfront:defaultSecurityPolicyTLSv1.2_2021": true,
+		"@aws-cdk/aws-iam:minimizePolicies": true,
+		"deploy": [
+			{
+				"awsRegion": "ap-southeast-2",
+				"awsRegionShortform": "apse2",
+				"awsAccount": "593223115766",
+				"environment": "dev",
+				"clusterName": "easydairyEKSClusterdevAFF098BF-4fa7a05601364ed2a385c7fd719d0191",
+				"oidcProviderArn": "arn:aws:iam::593223115766:oidc-provider/oidc.eks.ap-southeast-2.amazonaws.com/id/6A28A1E3D909C5A5C699AFDBE92930EF",
+				"namespace": "dev-easydairy-web"
+			},
+			{
+				"awsRegion": "ap-southeast-2",
+				"awsRegionShortform": "apse2",
+				"awsAccount": "593223115766",
+				"environment": "uat",
+				"clusterName": "easydairyEKSClusterdevAFF098BF-4fa7a05601364ed2a385c7fd719d0191",
+				"oidcProviderArn": "arn:aws:iam::593223115766:oidc-provider/oidc.eks.ap-southeast-2.amazonaws.com/id/6A28A1E3D909C5A5C699AFDBE92930EF",
+				"namespace": "uat-easydairy-web"
+			},
+			{
+				"awsRegion": "ap-southeast-2",
+				"awsRegionShortform": "apse2",
+				"awsAccount": "593223115766",
+				"environment": "prod",
+				"clusterName": "easydairyEKSClusterdevAFF098BF-4fa7a05601364ed2a385c7fd719d0191",
+				"oidcProviderArn": "arn:aws:iam::593223115766:oidc-provider/oidc.eks.ap-southeast-2.amazonaws.com/id/6A28A1E3D909C5A5C699AFDBE92930EF",
+				"namespace": "prod-easydairy-web"
+			}
+		]
+	},
+	"versionReporting": false,
+	"requireApproval": "never"
+}
