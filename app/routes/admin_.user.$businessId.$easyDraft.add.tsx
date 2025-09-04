@@ -88,7 +88,7 @@ export async function action({ request }: ActionFunctionArgs) {
     // Call API to create the user with the force password change flag and login code.
     const res = await callAPI<GenericAPI>(request, '/api/dev/user', {
       ...validation.data,
-      password: null, // Don't set a temporary password here
+      password: null, 
       tempLoginCode: loginCode, // Pass the generated code to the backend
       forcePasswordChange: true,
     }, 'POST');
