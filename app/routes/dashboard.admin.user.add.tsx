@@ -6,6 +6,7 @@ import type { GenericAPI, DropdownOpts } from '~/lib/types';
 import Button from '~/components/ui/Button';
 import Input from '~/components/ui/Input';
 import SelectDropdown from "~/components/ui/Dropdown";
+import { SwitchToggle } from '~/components/ui/Switch';
 import z from 'zod';
 import React, { useEffect } from 'react';
 
@@ -27,6 +28,7 @@ const baseRegisterUserSchema = z.object({
     firstName: z.string().min(1, 'First Name is required'),
     lastName: z.string().min(1, 'Last Name is required'),
     role: z.string().min(1, 'Role is required'),
+    forcePasswordChange: z.boolean().optional(),
 })
 
 const userRoleOptions: DropdownOpts = [
@@ -55,47 +57,79 @@ export async function loader({request, params}: LoaderFunctionArgs) {
 
 export async function action({ request }: ActionFunctionArgs) {
     const formData = await request.formData();
-    const requestData = Object.fromEntries(formData);
+    const rawData = Object.fromEntries(formData);
+
+    // Convert forcePasswordChange string to boolean
+    const requestData = {
+        ...rawData,
+        forcePasswordChange: rawData.forcePasswordChange === 'true'
+    };
+
+    console.log('Request data:', requestData); // Debug log
+
     const validation = baseRegisterUserSchema.safeParse(requestData);
 
     if (!validation.success) {
+        console.log('Validation errors:', validation.error.flatten()); // Debug log
         const fieldErrors = validation.error.flatten()?.fieldErrors;
         return json({
           status: 'validation error',
-          message: null,
+          message: 'Validation failed: ' + JSON.stringify(validation.error.flatten()),
           userId: null,
           errors: null,
           fieldErrors: fieldErrors,
         });
     }
-    const res = await callAPI<GenericAPI>(request, '/api/admin/user', validation.data, 'POST');
-    if (!res.success || (res.success && !res.response.user)) {
-        return json({
-          status: 'api error',
-          message: !res.success ? res.response.errors as string : res.response.message,
-          userId: null,
-          errors: null,
-          fieldErrors: null,
-        });
-    } else {
-        const resetRes = await callAPI<GenericAPI>(request, '/api/auth/forgetPassword', {email:validation.data.email,isInvite: true} , 'POST')
-        if (!resetRes.success) {
+
+    console.log('Calling API with:', validation.data); // Debug log
+
+    try {
+        const res = await callAPI<GenericAPI>(request, '/api/admin/user', validation.data, 'POST');
+
+        console.log('API response:', res); // Debug log
+
+        if (!res.success || (res.success && !res.response.user)) {
             return json({
               status: 'api error',
-              message: 'User added successfully, but email for password setup failed',
+              message: !res.success ? res.response.errors as string : res.response.message,
               userId: null,
               errors: null,
               fieldErrors: null,
             });
         } else {
-            return json({
-                status: 'success',
-                message: res.response.message+' email for password setup sent',
-                userId: res.response.user?.UserID,
-                errors: null,
-                fieldErrors: null,
-              });
+            // Always send password setup email since this form never has password fields
+            const resetRes = await callAPI<GenericAPI>(request, '/api/auth/forgetPassword', {email:validation.data.email,isInvite: true} , 'POST')
+            if (!resetRes.success) {
+                return json({
+                  status: 'api error',
+                  message: 'User added successfully, but email for password setup failed',
+                  userId: res.response.user?.UserID,
+                  errors: null,
+                  fieldErrors: null,
+                });
+            } else {
+                const successMessage = validation.data.forcePasswordChange
+                    ? res.response.message + ' - User will be prompted to change password on first login'
+                    : res.response.message + ' - Email for password setup sent';
+
+                return json({
+                    status: 'success',
+                    message: successMessage,
+                    userId: res.response.user?.UserID,
+                    errors: null,
+                    fieldErrors: null,
+                });
+            }
         }
+    } catch (error) {
+        console.error('API call error:', error);
+        return json({
+          status: 'api error',
+          message: 'Failed to create user: ' + (error instanceof Error ? error.message : 'Unknown error'),
+          userId: null,
+          errors: null,
+          fieldErrors: null,
+        });
     }
 }
 
@@ -104,6 +138,7 @@ export default function AddUser() {
     const actionData = useActionData<typeof action>();
     const formRef = React.useRef<HTMLFormElement>(null);
     const [userRoleSelection, setUserRoleSelection] = React.useState(roleTypes.USER);
+    const [forcePasswordChange, setForcePasswordChange] = React.useState(false);
     useEffect(() => {
         if (actionData?.status === 'success') {
           formRef.current?.reset();
@@ -150,16 +185,24 @@ export default function AddUser() {
                             <SelectDropdown type='single' label="Role" name='roleDropdown' options={userRoleOptions} value={userRoleSelection} className="text-primary-500" onSelectChange={(val) => {
                                 setUserRoleSelection(val.value)
                             }} />
-                            <Input 
+                            <Input
                                 type="hidden"
-                                name='role' 
-                                value={userRoleSelection} 
+                                name='role'
+                                value={userRoleSelection}
                             />
                             <Input
                                 type='hidden'
                                 name='businessId'
                                 value={data.businessId}
                             />
+                            <div className="flex gap-4 mb-4">
+                                <SwitchToggle
+                                    enabled={forcePasswordChange}
+                                    setEnabled={setForcePasswordChange}
+                                />
+                                <label>User must change password at next login</label>
+                            </div>
+                            <input type="hidden" name="forcePasswordChange" value={String(forcePasswordChange)} />
                             <Button type='submit' className='w-max ml-auto'>
                                 Add
                             </Button>
